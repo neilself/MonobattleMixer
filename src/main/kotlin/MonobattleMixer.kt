@@ -20,11 +20,7 @@ class MonobattleMixer {
 
   fun run() {
     val playerNameList = File(playerFilename).readLines()
-
-    val playerList = mutableListOf<Player>()
-    for (name in playerNameList) {
-      playerList.add(Player(name))
-    }
+    val playerList: MutableList<Player> = playerNameList.map { Player(it) }.toMutableList()
 
     // Initialize match counting maps so that all pairing histories are at 0
     for (i in 0 until playerList.size - 1) {
@@ -218,7 +214,6 @@ class MonobattleMixer {
   }
 
   fun findRedundantTeamPairs(teamPairList: List<Pair<List<Player>, List<Player>>>): Int {
-    var count = 0
     val listCopy = teamPairList.toMutableList()
 
     for (i in listCopy.indices.reversed()) {
