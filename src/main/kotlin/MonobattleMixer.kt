@@ -46,8 +46,7 @@ class MonobattleMixer {
       val teamPair = createTeamPairUsingStateSpaceExploration(playerList, numPlayersPerRound, numPlayersPerTeam)
       println("Found ideal teamPair: ${playerListToString(teamPair.first)} & ${playerListToString(teamPair.second)}")
 
-      incrementPairingsAndGamesPlayed(teamPair.first)
-      incrementPairingsAndGamesPlayed(teamPair.second)
+      incrementPairingsAndGamesPlayed(teamPair)
       roundList.add(Pair(teamPair.first, teamPair.second))
       println("\n\nPlayers for round $i:\n\n${playerListToString(playerList)}")
     }
@@ -165,11 +164,16 @@ class MonobattleMixer {
     return score
   }
 
+  private fun incrementPairingsAndGamesPlayed(teamPair: Pair<List<Player>, List<Player>>) {
+    incrementPairingsAndGamesPlayed(teamPair.first)
+    incrementPairingsAndGamesPlayed(teamPair.second)
+  }
+
   private fun incrementPairingsAndGamesPlayed(list: List<Player>) {
     for (i in 0 until list.size - 1) {
       for (j in i+1 until list.size) {
-        list[i].matchCountingMap.set(list[j], list[i].matchCountingMap.getValue(list[j]) + 1)
-        list[j].matchCountingMap.set(list[i], list[j].matchCountingMap.getValue(list[i]) + 1)
+        list[i].matchCountingMap[list[j]] = list[i].matchCountingMap.getValue(list[j]) + 1
+        list[j].matchCountingMap[list[i]] = list[j].matchCountingMap.getValue(list[i]) + 1
       }
     }
     for (player in list) {
@@ -244,7 +248,7 @@ class MonobattleMixer {
 
   fun createTeamPairUsingSimpleGreedyAlgorithm(playerList: List<Player>, numPlayersPerRound: Int, numPlayersPerTeam: Int): Pair<List<Player>,
           List<Player>> {
-    // Create temp player list of whoever's played the least
+    // Create temp player list of whoever has played the least
     val tempPlayerList = mutableListOf<Player>()
     tempPlayerList.addAll(playerList.subList(0, numPlayersPerRound))
 
