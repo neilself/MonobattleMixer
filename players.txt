@@ -10,3 +10,7 @@ PeeAndKeele
 Turing
 Biosif
 OrangCaramel
+Tapirus
+MachoTaco
+FunkyMonk
+Galoubet

@@ -12,9 +12,11 @@ fun debugPrintln(str: String) {
 
 const val debugMode: Boolean = false
 const val playerFilename = "players.txt"
-const val numPlayersPerRound = 8
+const val outputFilename = "teams.txt"
+const val numMatchupsPerRound = 2
+const val numPlayersPerMatchup = 8
 const val numPlayersPerTeam = 4
-const val numRounds = 17
+const val numRounds = 16
 
 class MonobattleMixer {
 
@@ -24,17 +26,18 @@ class MonobattleMixer {
 
     // Initialize match counting maps so that all pairing histories are at 0
     for (i in 0 until playerList.size - 1) {
-      for (j in i+1 until playerList.size) {
+      for (j in i + 1 until playerList.size) {
         playerList[i].matchCountingMap[playerList[j]] = 0
         playerList[j].matchCountingMap[playerList[i]] = 0
       }
     }
 
     // Each round is a pair of player lists (each player list being one team).
-    val roundList = mutableListOf<Pair<List<Player>, List<Player>>>()
+    val roundList = mutableListOf<List<Pair<List<Player>, List<Player>>>>()
 
     println("\n\nPlayers for round 0:\n\n${playerListToString(playerList)}")
 
+    val builder = StringBuilder("\n====== Monobattle Mixer Teams ======\n")
     for (i in 1..numRounds) {
       println("")
       // Shuffle, then sort the player list based on games played
@@ -43,36 +46,55 @@ class MonobattleMixer {
 
       // TODO: Should probably use an interface to make switching between algorithms less hacky
 //      val teamPair = createTeamPairUsingSimpleGreedyAlgorithm(playerList, numPlayersPerRound, numPlayersPerTeam)
-      val teamPair = createTeamPairUsingStateSpaceExploration(playerList, numPlayersPerRound, numPlayersPerTeam)
-      println("Found ideal teamPair: ${playerListToString(teamPair.first)} & ${playerListToString(teamPair.second)}")
+      val teamPairs = createTeamPairUsingStateSpaceExploration(playerList, numMatchupsPerRound, numPlayersPerMatchup,
+        numPlayersPerTeam)
+      println("Found ideal teamPairs:")
+      builder.append("\n--- Round $i ---\n")
+      for (j in teamPairs.indices) {
+        val teamPair = teamPairs[j]
+        println("teamPair: ${playerListToString(teamPair.first)} & ${playerListToString(teamPair.second)}")
+        builder.append("(${j * 2 + 1}) ${playerListToSimpleString(teamPair.first)} vs (${j * 2 + 2}) ${
+          playerListToSimpleString(teamPair
+            .second)
+        }\n")
+      }
 
-      incrementPairingsAndGamesPlayed(teamPair)
-      roundList.add(Pair(teamPair.first, teamPair.second))
+      incrementPairingsAndGamesPlayedForTeamPairs(teamPairs)
+      roundList.add(teamPairs)
       println("\n\nPlayers for round $i:\n\n${playerListToString(playerList)}")
+    }
+
+    File(outputFilename).printWriter().use { out ->
+      out.write(builder.toString())
     }
   }
 
-  private fun createTeamPairUsingStateSpaceExploration(playerList: List<Player>, numPlayersPerRound: Int, numPlayersPerTeam:
-  Int): Pair<List<Player>, List<Player>> {
-    val tempPlayerList = mutableListOf<Player>()
-    tempPlayerList.addAll(playerList.subList(0, numPlayersPerRound))
+  private fun createTeamPairUsingStateSpaceExploration(playerList: List<Player>, numMatchupsPerRound: Int,
+    numPlayersPerMatchup: Int, numPlayersPerTeam: Int,
+  ): List<Pair<List<Player>, List<Player>>> {
+    val returnList = mutableListOf<Pair<List<Player>, List<Player>>>()
+    for (i in 0 until numMatchupsPerRound) {
+      val tempPlayerList = mutableListOf<Player>()
+      tempPlayerList.addAll(playerList.subList(i * numPlayersPerMatchup, (i + 1) * numPlayersPerMatchup))
 
-    val allPossibleTeamPairs = createListOfTeamPairs(tempPlayerList, createAllPossibleTeams(tempPlayerList,
-      mutableListOf(),
-      numPlayersPerTeam))
-    debugPrintln("Number of possible team pairs: ${allPossibleTeamPairs.size}")
-    var lowestScoringTeamPairSoFar = allPossibleTeamPairs[0]
-    var lowestScoreSoFar = Int.MAX_VALUE
-    for (teamPair in allPossibleTeamPairs) {
-      val score = scoreTeamPair(teamPair)
-      if (score < lowestScoreSoFar) {
-        debugPrintln("New better score found: $score")
-        lowestScoreSoFar = score
-        lowestScoringTeamPairSoFar = teamPair
+      val allPossibleTeamPairs = createListOfTeamPairs(tempPlayerList, createAllPossibleTeams(tempPlayerList,
+        mutableListOf(),
+        numPlayersPerTeam))
+      debugPrintln("Number of possible team pairs: ${allPossibleTeamPairs.size}")
+      var lowestScoringTeamPairSoFar = allPossibleTeamPairs[0]
+      var lowestScoreSoFar = Int.MAX_VALUE
+      for (teamPair in allPossibleTeamPairs) {
+        val score = scoreTeamPair(teamPair)
+        if (score < lowestScoreSoFar) {
+          debugPrintln("New better score found: $score")
+          lowestScoreSoFar = score
+          lowestScoringTeamPairSoFar = teamPair
+        }
       }
-    }
 
-    return lowestScoringTeamPairSoFar
+      returnList.add(lowestScoringTeamPairSoFar)
+    }
+    return returnList
   }
 
   private fun createListOfTeamPairs(playerList: List<Player>, teamList: List<List<Player>>): List<Pair<List<Player>,
@@ -88,8 +110,11 @@ class MonobattleMixer {
     return returnList
   }
 
-  private fun createAllPossibleTeams(playerPoolList: List<Player>, oneTeamSoFar: MutableList<Player>, numPlayersPerTeam:
-  Int):
+  private fun createAllPossibleTeams(
+    playerPoolList: List<Player>, oneTeamSoFar: MutableList<Player>,
+    numPlayersPerTeam:
+    Int,
+  ):
           List<List<Player>> {
     // Where the magic happens. This is a recursive function that basically does a "N choose K".
     //
@@ -120,7 +145,7 @@ class MonobattleMixer {
       // Shift one player from the player pool list to the team being steadily created
       oneTeamSoFarCopy.add(player)
       // Remove the player that was added, as well as earlier players from playerPoolList, from playerPoolListCopy
-      playerPoolListCopy.removeAll(playerPoolListCopy.subList(0, i+1))
+      playerPoolListCopy.removeAll(playerPoolListCopy.subList(0, i + 1))
 
       // Pass that down to a recursive call, and add what gets returned to what we'll eventually return
       returnList.addAll(createAllPossibleTeams(playerPoolListCopy, oneTeamSoFarCopy, numPlayersPerTeam))
@@ -129,7 +154,10 @@ class MonobattleMixer {
     return returnList
   }
 
-  private fun areTeamPairsEquivalent(teamPairOne: Pair<List<Player>, List<Player>>, teamPairTwo: Pair<List<Player>, List<Player>>)
+  private fun areTeamPairsEquivalent(
+    teamPairOne: Pair<List<Player>, List<Player>>,
+    teamPairTwo: Pair<List<Player>, List<Player>>,
+  )
           : Boolean {
     val nameSetPairOneFirst: MutableSet<String> = teamPairOne.first.map { it.name }.toMutableSet()
     val nameSetPairTwoFirst: MutableSet<String> = teamPairTwo.first.map { it.name }.toMutableSet()
@@ -150,7 +178,7 @@ class MonobattleMixer {
   private fun scoreTeam(team: List<Player>): Int {
     var score = 0
     for (i in 0 until team.size - 1) {
-      for (j in i+1 until team.size) {
+      for (j in i + 1 until team.size) {
         val scoreOrNull = team[i].matchCountingMap[team[j]]
         // TODO: There's probably a better way to do this null handling.
         if (scoreOrNull != null) {
@@ -164,6 +192,12 @@ class MonobattleMixer {
     return score
   }
 
+  private fun incrementPairingsAndGamesPlayedForTeamPairs(teamPairs: List<Pair<List<Player>, List<Player>>>) {
+    for (teamPair in teamPairs) {
+      incrementPairingsAndGamesPlayed(teamPair)
+    }
+  }
+
   private fun incrementPairingsAndGamesPlayed(teamPair: Pair<List<Player>, List<Player>>) {
     incrementPairingsAndGamesPlayed(teamPair.first)
     incrementPairingsAndGamesPlayed(teamPair.second)
@@ -171,7 +205,7 @@ class MonobattleMixer {
 
   private fun incrementPairingsAndGamesPlayed(list: List<Player>) {
     for (i in 0 until list.size - 1) {
-      for (j in i+1 until list.size) {
+      for (j in i + 1 until list.size) {
         list[i].matchCountingMap[list[j]] = list[i].matchCountingMap.getValue(list[j]) + 1
         list[j].matchCountingMap[list[i]] = list[j].matchCountingMap.getValue(list[i]) + 1
       }
@@ -217,6 +251,24 @@ class MonobattleMixer {
     return builder.toString()
   }
 
+  private fun playerListToSimpleString(list: List<Player>): String {
+    val newList = mutableListOf<Player>()
+    newList.addAll(list)
+    newList.sortWith { o1, o2 -> o1.name.compareTo(o2.name) }
+
+    val builder = StringBuilder()
+    builder.append("[")
+    for (i in list.indices) {
+      val player = list[i]
+      builder.append(player.name)
+      if (i != list.size - 1) {
+        builder.append(", ")
+      }
+    }
+    builder.append("]")
+    return builder.toString()
+  }
+
   fun findRedundantTeamPairs(teamPairList: List<Pair<List<Player>, List<Player>>>): Int {
     val listCopy = teamPairList.toMutableList()
 
@@ -233,10 +285,14 @@ class MonobattleMixer {
         val pairTwo = teamPairList[j]
 
         if (areTeamPairsEquivalent(pairOne, pairTwo)) {
-          debugPrintln("Found equal team pairs: ${playerListToString(pairOne.first)} - ${playerListToString(pairOne
-            .second)}")
-          debugPrintln("with: ${playerListToString(pairTwo.first)} - ${playerListToString(pairTwo
-            .second)}")
+          debugPrintln("Found equal team pairs: ${playerListToString(pairOne.first)} - ${
+            playerListToString(pairOne
+              .second)
+          }")
+          debugPrintln("with: ${playerListToString(pairTwo.first)} - ${
+            playerListToString(pairTwo
+              .second)
+          }")
           listCopy.removeAt(i)
           break
         }
@@ -246,7 +302,11 @@ class MonobattleMixer {
     return listCopy.size
   }
 
-  fun createTeamPairUsingSimpleGreedyAlgorithm(playerList: List<Player>, numPlayersPerRound: Int, numPlayersPerTeam: Int): Pair<List<Player>,
+  fun createTeamPairUsingSimpleGreedyAlgorithm(
+    playerList: List<Player>,
+    numPlayersPerRound: Int,
+    numPlayersPerTeam: Int,
+  ): Pair<List<Player>,
           List<Player>> {
     // Create temp player list of whoever has played the least
     val tempPlayerList = mutableListOf<Player>()
